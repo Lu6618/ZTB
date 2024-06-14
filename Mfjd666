@@ -5,88 +5,51 @@ addEventListener('fetch', event => {
 });
 
 async function handleRequest(request) {
-    const url = new URL(request.url);
+    const { pathname } = new URL(request.url);
 
-    if (request.method === 'POST' && url.pathname === '/api/create-paste') {
-        try {
-            const { content, expiration, password } = await request.json();
-            const id = generateID(); // 生成唯一 ID
-            const expires = Date.now() + expiration * 60 * 60 * 1000; // 计算过期时间
-
-            const paste = {
-                id,
-                content,
-                expires,
-                password
-            };
-
-            await PASTES.put(id, JSON.stringify(paste));
-
-            const shareLink = `https://yourdomain.com/view/${id}`; // 替换为你的域名和路径
-
-            return new Response(JSON.stringify({ link: shareLink }), {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                status: 200
-            });
-        } catch (error) {
-            return new Response(JSON.stringify({ error: 'Failed to create paste.' }), {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                status: 500
-            });
-        }
-    } else if (request.method === 'PUT' && url.pathname === '/api/update-paste') {
-        try {
-            const { id, content, password } = await request.json();
-            const existingPaste = await PASTES.get(id);
-
-            if (!existingPaste) {
-                return new Response(JSON.stringify({ error: 'Paste not found.' }), {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    status: 404
-                });
-            }
-
-            const parsedPaste = JSON.parse(existingPaste);
-            if (password !== parsedPaste.password) {
-                return new Response(JSON.stringify({ error: 'Unauthorized.' }), {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    status: 401
-                });
-            }
-
-            parsedPaste.content = content;
-            await PASTES.put(id, JSON.stringify(parsedPaste));
-
-            return new Response(JSON.stringify({ message: 'Paste updated successfully.' }), {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                status: 200
-            });
-        } catch (error) {
-            return new Response(JSON.stringify({ error: 'Failed to update paste.' }), {
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                status: 500
-            });
-        }
-    } else {
-        return new Response('Not Found', {
-            status: 404,
+    // 处理 /api/pastes 的 POST 请求，创建新的粘贴
+    if (request.method === 'POST' && pathname === '/api/pastes') {
+        const { content } = await request.json();
+        const id = generateID(); // 生成唯一 ID
+        const createdAt = new Date().toISOString();
+        const paste = { id, content, createdAt };
+        await PASTES.put(id, JSON.stringify(paste)); // 将粘贴内容存储到 KV 存储中
+        return new Response(JSON.stringify(paste), {
             headers: {
-                'Content-Type': 'text/plain'
-            }
+                'Content-Type': 'application/json',
+            },
         });
     }
+
+    // 处理 /api/pastes 的 GET 请求，获取所有粘贴内容
+    if (request.method === 'GET' && pathname === '/api/pastes') {
+        const pastes = await getAllPastes(); // 获取所有粘贴内容
+        return new Response(JSON.stringify(pastes), {
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+    }
+
+    // 默认返回 404 Not Found
+    return new Response('Not Found', {
+        status: 404,
+        headers: {
+            'Content-Type': 'text/plain',
+        },
+    });
+}
+
+async function getAllPastes() {
+    const pasteList = [];
+    // 遍历 KV 存储中的所有条目，并将其添加到数组中
+    await PASTES.list({}).then((keys) => {
+        keys.keys.forEach(async (element) => {
+            const { value } = await PASTES.get(element.name);
+            pasteList.push(JSON.parse(value));
+        });
+    });
+    return pasteList;
 }
 
 function generateID() {
