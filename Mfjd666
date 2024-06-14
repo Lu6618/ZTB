@@ -1,4 +1,4 @@
-const PASTES = PASTES_NAMESPACE;
+const PASTES = PASTES;
 
 addEventListener('fetch', event => {
     event.respondWith(handleRequest(event.request));
